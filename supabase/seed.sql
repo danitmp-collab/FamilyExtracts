@@ -1,4 +1,4 @@
-select set_config('app.seed_admin_email', 'REPLACE_WITH_DANI_EMAIL', false);
+select set_config('app.seed_admin_email', 'danitmp@gmail.com', false);
 
 do $$
 declare

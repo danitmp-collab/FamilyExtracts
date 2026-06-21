@@ -120,6 +120,7 @@ create table public.transactions (
   importe numeric(14, 2) not null,
   saldo numeric(14, 2),
   referencia text,
+  deduplication_key text not null,
   category_id uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -157,7 +158,7 @@ create index transactions_grupo_concepto_idx on public.transactions (workspace_i
 create index transactions_concepto_normalizado_idx on public.transactions (workspace_id, concepto_normalizado);
 
 create unique index transactions_deduplication_idx
-  on public.transactions (bank_account_id, fecha_operativa, concepto_normalizado, importe);
+  on public.transactions (bank_account_id, deduplication_key);
 
 create or replace function public.set_updated_at()
 returns trigger

@@ -61,3 +61,36 @@ export async function getEconomicEntity(entityId: string) {
     entity: data
   };
 }
+
+export async function canManageEconomicEntity(entityId: string) {
+  const workspace = await getCurrentWorkspace();
+
+  if (workspace.role === "admin") {
+    return true;
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+
+  if (!user?.email) {
+    return false;
+  }
+
+  const { data, error } = await supabase
+    .from("entity_accesses")
+    .select("id")
+    .eq("workspace_id", workspace.id)
+    .eq("economic_entity_id", entityId)
+    .eq("email", user.email.toLowerCase())
+    .eq("can_manage", true)
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+
+  if (error) {
+    throw new Error(`No se pudo comprobar el permiso de gestion: ${error.message}`);
+  }
+
+  return Boolean(data);
+}

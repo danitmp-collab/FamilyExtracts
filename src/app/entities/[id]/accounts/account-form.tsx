@@ -26,19 +26,6 @@ export function AccountForm({
       </label>
 
       <label className="field">
-        <span>Ultimos 4 digitos IBAN</span>
-        <input
-          className="input"
-          type="text"
-          name="iban_last4"
-          defaultValue={account?.iban_last4 ?? ""}
-          inputMode="numeric"
-          maxLength={4}
-          pattern="[0-9]{4}"
-        />
-      </label>
-
-      <label className="field">
         <span>Moneda</span>
         <input
           className="input"

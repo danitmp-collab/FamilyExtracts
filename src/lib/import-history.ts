@@ -159,6 +159,9 @@ export function formatMoney(value: number | string | null) {
   }
 
   return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+    currencyDisplay: "symbol",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(amount);

@@ -1,12 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  getMovementType,
-  getMovementTypeLabel,
-  listMovementsForAccount,
-  parseMovementFilters
-} from "@/lib/movements";
-import { formatImportDate, formatMoney, formatTransactionDate } from "@/lib/import-history";
+import { MobileBottomNav } from "@/app/mobile-bottom-nav";
+import { listMovementFilterOptions, listMovementsForAccount, parseMovementFilters } from "@/lib/movements";
+import { formatMoney, formatTransactionDate } from "@/lib/import-history";
+import { getViewMode, withViewMode } from "@/lib/view-mode";
 
 type MovementsPageProps = {
   params: Promise<{
@@ -18,128 +15,116 @@ type MovementsPageProps = {
 
 export default async function MovementsPage({ params, searchParams }: MovementsPageProps) {
   const { id, accountId } = await params;
-  const filters = parseMovementFilters(await searchParams);
+  const rawSearchParams = await searchParams;
+  const viewMode = getViewMode(rawSearchParams);
+  const isPersonalView = viewMode === "personal";
+  const filters = parseMovementFilters(rawSearchParams);
   const { workspace, entity, account, movements } = await listMovementsForAccount(id, accountId, filters);
+  const filterOptions = await listMovementFilterOptions(id, accountId);
 
   if (!entity || !account) {
     notFound();
   }
 
   return (
-    <main className="page">
-      <section className="shell">
-        <div className="row">
+    <main className="page finance-page finance-detail-page">
+      <section className="shell finance-shell">
+        <div className="row finance-topbar">
           <div>
             <p className="eyebrow">{workspace.name} / {entity.name}</p>
-            <h1>Movimientos</h1>
-            <p className="muted">Cuenta: {account.name}</p>
-          </div>
-
-          <div className="actions">
-            <Link className="button secondary" href={`/entities/${entity.id}/accounts/${account.id}`}>
-              Cuenta
-            </Link>
-            <Link className="button secondary" href={`/entities/${entity.id}/accounts/${account.id}/imports`}>
-              Importaciones
-            </Link>
+            <h1>Extracto</h1>
+            <p className="muted">{account.name}</p>
           </div>
         </div>
 
-        <div className="panel stack">
-          <form className="filter-grid" action={`/entities/${entity.id}/accounts/${account.id}/movements`}>
-            <label className="field">
-              <span>Fecha desde</span>
-              <input className="input" type="date" name="dateFrom" defaultValue={filters.dateFrom ?? ""} />
-            </label>
-            <label className="field">
-              <span>Fecha hasta</span>
-              <input className="input" type="date" name="dateTo" defaultValue={filters.dateTo ?? ""} />
-            </label>
-            <label className="field">
-              <span>Concepto</span>
-              <input className="input" type="text" name="concept" defaultValue={filters.concept ?? ""} />
-            </label>
-            <label className="field">
-              <span>Importe minimo</span>
-              <input className="input" type="number" step="0.01" name="amountMin" defaultValue={filters.amountMin ?? ""} />
-            </label>
-            <label className="field">
-              <span>Importe maximo</span>
-              <input className="input" type="number" step="0.01" name="amountMax" defaultValue={filters.amountMax ?? ""} />
-            </label>
-            <label className="field">
-              <span>Tipo</span>
-              <select className="input" name="type" defaultValue={filters.type ?? ""}>
-                <option value="">Todos</option>
-                <option value="income">Ingreso</option>
-                <option value="expense">Gasto</option>
-              </select>
-            </label>
-            <div className="actions filter-actions">
-              <button className="button" type="submit">
-                Filtrar
+        <div className="panel compact-panel stack finance-account-panel">
+          <form className="concept-filter-form" action={`/entities/${entity.id}/accounts/${account.id}/movements`}>
+            {isPersonalView ? <input type="hidden" name="mode" value="personal" /> : null}
+            {filters.type ? <input type="hidden" name="type" value={filters.type} /> : null}
+
+            <div className="concept-filter-row compact-concept-filter-row">
+              <label className="field compact-field">
+                <span>Año</span>
+                <select className="input" name="year" defaultValue={filters.year ?? ""}>
+                  <option value="">Todos</option>
+                  {filterOptions.years.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field compact-field">
+                <span>Mes</span>
+                <select className="input" name="month" defaultValue={filters.month ?? ""}>
+                  <option value="">Todos</option>
+                  {filterOptions.months.map((month) => (
+                    <option key={month.value} value={month.value}>
+                      {month.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <button className="button compact-apply-button" type="submit">
+                Aplicar
               </button>
-              <Link className="button secondary" href={`/entities/${entity.id}/accounts/${account.id}/movements`}>
-                Limpiar
-              </Link>
+
+              <details className="date-filter-details compact-date-details">
+                <summary aria-label="Configurar fechas">
+                  <span className="calendar-icon" aria-hidden="true" />
+                  <span className="sr-only">Configurar fechas</span>
+                </summary>
+                <div className="date-range-row">
+                  <label className="field">
+                    <span>Desde</span>
+                    <input className="input" type="date" name="dateFrom" defaultValue={filters.dateFrom ?? ""} />
+                  </label>
+                  <label className="field">
+                    <span>Hasta</span>
+                    <input className="input" type="date" name="dateTo" defaultValue={filters.dateTo ?? ""} />
+                  </label>
+                  <button className="button secondary" type="submit">
+                    Filtrar fechas
+                  </button>
+                </div>
+              </details>
             </div>
           </form>
         </div>
 
-        <div className="panel stack">
-          <div className="toolbar">
-            <h2>Listado</h2>
+        <div className="panel compact-panel stack statement-panel finance-account-panel">
+          <div className="toolbar statement-toolbar">
+            <h2>Movimientos</h2>
             <p className="muted">{movements.length} movimientos</p>
           </div>
 
           {movements.length === 0 ? (
             <p className="muted">No hay movimientos para los filtros seleccionados.</p>
           ) : (
-            <div className="table-wrap">
-              <table className="table movements-table">
-                <thead>
-                  <tr>
-                    <th>Fecha operativa</th>
-                    <th>Concepto original</th>
-                    <th>Concepto normalizado</th>
-                    <th>Importe</th>
-                    <th>Tipo</th>
-                    <th>Importacion</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {movements.map((movement) => {
-                    const type = getMovementType(movement.importe);
+            <div className="statement-list">
+              {movements.map((movement) => {
+                const amount = Number(movement.importe);
 
-                    return (
-                      <tr key={movement.id}>
-                        <td>{formatTransactionDate(movement.fecha_operativa)}</td>
-                        <td>{movement.concepto_original}</td>
-                        <td>{movement.concepto_normalizado}</td>
-                        <td>{formatMoney(movement.importe)}</td>
-                        <td>
-                          <span className={`status movement-${type}`}>{getMovementTypeLabel(type)}</span>
-                        </td>
-                        <td>
-                          {movement.imports ? (
-                            <Link
-                              className="text-link"
-                              href={`/entities/${entity.id}/accounts/${account.id}/imports/${movement.import_id}`}
-                            >
-                              {movement.imports.file_name} · {formatImportDate(movement.imports.created_at)}
-                            </Link>
-                          ) : (
-                            "-"
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                return (
+                  <Link
+                    className="statement-row"
+                    href={withViewMode(`/entities/${entity.id}/accounts/${account.id}/movements/${movement.id}`, viewMode)}
+                    key={movement.id}
+                  >
+                    <span className="statement-date">{formatTransactionDate(movement.fecha_operativa)}</span>
+                    <span className="statement-concept">{movement.concepto_original || movement.concepto_normalizado || "-"}</span>
+                    <strong className={amount >= 0 ? "statement-amount income" : "statement-amount expense"}>
+                      {formatMoney(movement.importe)}
+                    </strong>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>
+        <MobileBottomNav active="accounts" personalHomeHref={withViewMode(`/entities/${entity.id}`, viewMode)} viewMode={viewMode} />
       </section>
     </main>
   );

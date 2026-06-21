@@ -11,6 +11,7 @@ export type PreviewTransaction = {
   importe: number | null;
   saldo: number | null;
   referencia: string | null;
+  deduplication_key: string | null;
   errors: string[];
 };
 
@@ -201,6 +202,7 @@ function parsePreviewRow(row: ExcelJS.Row, rowNumber: number, columns: ColumnMap
     importe,
     saldo,
     referencia,
+    deduplication_key: null,
     errors
   };
 }
@@ -383,6 +385,13 @@ function normalizeConcept(value: string) {
     return {
       normalized,
       group: "Bizum"
+    };
+  }
+
+  if (/\bSEGUROS?\b/.test(normalized)) {
+    return {
+      normalized,
+      group: "Seguros"
     };
   }
 

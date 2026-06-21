@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { MobileBottomNav } from "@/app/mobile-bottom-nav";
 import {
   formatImportDate,
   formatMoney,
@@ -29,9 +30,9 @@ export default async function ImportDetailPage({ params }: ImportDetailPageProps
   }
 
   return (
-    <main className="page">
-      <section className="shell">
-        <div className="row">
+    <main className="page finance-page finance-detail-page">
+      <section className="shell finance-shell">
+        <div className="row finance-topbar">
           <div>
             <p className="eyebrow">{workspace.name} / {entity.name} / {account.name}</p>
             <h1>{importRecord.file_name}</h1>
@@ -39,16 +40,16 @@ export default async function ImportDetailPage({ params }: ImportDetailPageProps
           </div>
 
           <div className="actions">
-            <Link className="button secondary" href={`/entities/${entity.id}/accounts/${account.id}/imports`}>
+            <Link className="button secondary finance-ghost-action" href={`/entities/${entity.id}/accounts/${account.id}/imports`}>
               Historial
             </Link>
-            <Link className="button secondary" href={`/entities/${entity.id}/accounts/${account.id}/movements`}>
+            <Link className="button secondary finance-ghost-action" href={`/entities/${entity.id}/accounts/${account.id}/movements`}>
               Movimientos
             </Link>
           </div>
         </div>
 
-        <div className="panel stack">
+        <div className="panel stack finance-account-panel">
           <h2>Informacion general</h2>
           <div className="definition-grid">
             <div className="definition-row">
@@ -70,7 +71,7 @@ export default async function ImportDetailPage({ params }: ImportDetailPageProps
           </div>
         </div>
 
-        <div className="summary-grid">
+        <div className="summary-grid finance-summary-grid">
           <div>
             <span>Filas totales</span>
             <strong>{importRecord.rows_total}</strong>
@@ -89,7 +90,7 @@ export default async function ImportDetailPage({ params }: ImportDetailPageProps
           </div>
         </div>
 
-        <div className="panel stack">
+        <div className="panel stack finance-account-panel">
           <h2>Movimientos asociados</h2>
           {transactions.length === 0 ? (
             <p className="muted">Esta importacion no tiene movimientos insertados.</p>
@@ -108,22 +109,34 @@ export default async function ImportDetailPage({ params }: ImportDetailPageProps
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map((transaction) => (
-                    <tr key={transaction.id}>
-                      <td>{formatTransactionDate(transaction.fecha_operativa)}</td>
-                      <td>{formatTransactionDate(transaction.fecha_valor)}</td>
-                      <td>{transaction.concepto_original}</td>
-                      <td>{transaction.grupo_concepto}</td>
-                      <td>{formatMoney(transaction.importe)}</td>
-                      <td>{formatMoney(transaction.saldo)}</td>
-                      <td>{transaction.referencia ?? "-"}</td>
-                    </tr>
-                  ))}
+                  {transactions.map((transaction) => {
+                    const amount = Number(transaction.importe);
+                    const balance = transaction.saldo === null ? null : Number(transaction.saldo);
+
+                    return (
+                      <tr key={transaction.id}>
+                        <td data-label="F. operativa">{formatTransactionDate(transaction.fecha_operativa)}</td>
+                        <td data-label="F. valor">{formatTransactionDate(transaction.fecha_valor)}</td>
+                        <td data-label="Concepto">
+                          <strong className="table-card-title">{transaction.concepto_original}</strong>
+                        </td>
+                        <td data-label="Grupo">{transaction.grupo_concepto}</td>
+                        <td className={amount < 0 ? "money-negative" : undefined} data-label="Importe">
+                          {formatMoney(transaction.importe)}
+                        </td>
+                        <td className={balance !== null && balance < 0 ? "money-negative" : undefined} data-label="Saldo">
+                          {formatMoney(transaction.saldo)}
+                        </td>
+                        <td data-label="Referencia">{transaction.referencia ?? "-"}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </div>
+        <MobileBottomNav active="accounts" />
       </section>
     </main>
   );

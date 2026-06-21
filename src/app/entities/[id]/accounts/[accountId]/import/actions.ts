@@ -2,6 +2,7 @@
 
 import { parseExcelPreview, type ExcelPreviewResult } from "@/lib/excel-preview";
 import { getBankAccountForEntity } from "@/lib/bank-accounts";
+import { canManageEconomicEntity } from "@/lib/economic-entities";
 import { createClient } from "@/lib/supabase/server";
 
 export type ImportPreviewState = {
@@ -11,7 +12,10 @@ export type ImportPreviewState = {
 
 export type CompleteImportState = {
   importId: string | null;
+  rowsTotal: number;
   rowsImported: number;
+  rowsDuplicates: number;
+  rowsFailed: number;
   error: string | null;
 };
 
@@ -27,6 +31,13 @@ export async function previewExcelImport(
     return {
       preview: null,
       error: "La entidad o cuenta seleccionada no existe."
+    };
+  }
+
+  if (!(await canManageEconomicEntity(entity.id))) {
+    return {
+      preview: null,
+      error: "No tienes permiso para importar movimientos en esta entidad."
     };
   }
 
@@ -71,8 +82,22 @@ export async function completeExcelImport(
   if (!entity || !account) {
     return {
       importId: null,
+      rowsTotal: 0,
       rowsImported: 0,
+      rowsDuplicates: 0,
+      rowsFailed: 0,
       error: "La entidad o cuenta seleccionada no existe."
+    };
+  }
+
+  if (!(await canManageEconomicEntity(entity.id))) {
+    return {
+      importId: null,
+      rowsTotal: 0,
+      rowsImported: 0,
+      rowsDuplicates: 0,
+      rowsFailed: 0,
+      error: "No tienes permiso para importar movimientos en esta entidad."
     };
   }
 
@@ -81,7 +106,10 @@ export async function completeExcelImport(
   if (!payload) {
     return {
       importId: null,
+      rowsTotal: 0,
       rowsImported: 0,
+      rowsDuplicates: 0,
+      rowsFailed: 0,
       error: "No se pudo leer la vista previa para confirmar la importacion."
     };
   }
@@ -89,7 +117,10 @@ export async function completeExcelImport(
   if (payload.summary.rows_new <= 0) {
     return {
       importId: null,
+      rowsTotal: payload.summary.rows_total,
       rowsImported: 0,
+      rowsDuplicates: payload.summary.rows_duplicates,
+      rowsFailed: payload.summary.rows_error,
       error: "No hay filas nuevas para importar."
     };
   }
@@ -110,7 +141,10 @@ export async function completeExcelImport(
   if (error) {
     return {
       importId: null,
+      rowsTotal: payload.summary.rows_total,
       rowsImported: 0,
+      rowsDuplicates: payload.summary.rows_duplicates,
+      rowsFailed: payload.summary.rows_error,
       error: `No se pudo confirmar la importacion: ${error.message}`
     };
   }
@@ -120,29 +154,33 @@ export async function completeExcelImport(
   if (!result?.import_id) {
     return {
       importId: null,
+      rowsTotal: payload.summary.rows_total,
       rowsImported: 0,
+      rowsDuplicates: payload.summary.rows_duplicates,
+      rowsFailed: payload.summary.rows_error,
       error: "La importacion se ejecuto sin devolver resultado."
     };
   }
 
   return {
     importId: result.import_id,
+    rowsTotal: payload.summary.rows_total,
     rowsImported: result.rows_imported,
+    rowsDuplicates: payload.summary.rows_duplicates,
+    rowsFailed: payload.summary.rows_error,
     error: null
   };
 }
 
 type ExistingTransaction = {
-  fecha_operativa: string;
-  concepto_normalizado: string;
-  importe: number | string;
+  deduplication_key: string;
 };
 
 async function markDuplicateRows(preview: ExcelPreviewResult, accountId: string): Promise<ExcelPreviewResult> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("transactions")
-    .select("fecha_operativa, concepto_normalizado, importe")
+    .select("deduplication_key")
     .eq("bank_account_id", accountId)
     .returns<ExistingTransaction[]>();
 
@@ -150,23 +188,31 @@ async function markDuplicateRows(preview: ExcelPreviewResult, accountId: string)
     throw new Error(`No se pudieron consultar movimientos existentes: ${error.message}`);
   }
 
-  const existingKeys = new Set(data.map((transaction) => buildDuplicateKey(transaction)));
+  const existingKeys = new Set(data.map((transaction) => transaction.deduplication_key));
+  const occurrences = new Map<string, number>();
   const rows = preview.rows.map((row) => {
     if (row.errors.length > 0 || !row.fecha_operativa || row.importe === null) {
       return {
         ...row,
+        deduplication_key: null,
         status: "error" as const
       };
     }
 
-    const key = buildDuplicateKey({
+    const baseKey = buildDeduplicationBaseKey({
       fecha_operativa: row.fecha_operativa,
       concepto_normalizado: row.concepto_normalizado,
-      importe: row.importe
+      importe: row.importe,
+      saldo: row.saldo,
+      referencia: row.referencia
     });
+    const occurrence = (occurrences.get(baseKey) ?? 0) + 1;
+    occurrences.set(baseKey, occurrence);
+    const key = `${baseKey}|${occurrence}`;
 
     return {
       ...row,
+      deduplication_key: key,
       status: existingKeys.has(key) ? ("duplicate" as const) : ("new" as const)
     };
   });
@@ -184,17 +230,37 @@ async function markDuplicateRows(preview: ExcelPreviewResult, accountId: string)
   };
 }
 
-function buildDuplicateKey(transaction: ExistingTransaction) {
+function buildDeduplicationBaseKey(transaction: {
+  fecha_operativa: string;
+  concepto_normalizado: string;
+  importe: number | string;
+  saldo?: number | string | null;
+  referencia?: string | null;
+}) {
   return [
     transaction.fecha_operativa,
     transaction.concepto_normalizado,
-    normalizeMoneyKey(transaction.importe)
+    normalizeMoneyKey(transaction.importe),
+    normalizeOptionalMoneyKey(transaction.saldo),
+    normalizeOptionalTextKey(transaction.referencia)
   ].join("|");
 }
 
 function normalizeMoneyKey(value: number | string) {
   const amount = typeof value === "number" ? value : Number(value);
   return Number.isFinite(amount) ? amount.toFixed(2) : String(value);
+}
+
+function normalizeOptionalMoneyKey(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+
+  return normalizeMoneyKey(value);
+}
+
+function normalizeOptionalTextKey(value: string | null | undefined) {
+  return value ? value.trim().replace(/\s+/g, " ") : "";
 }
 
 function normalizeCompleteImportResult(data: unknown): CompleteImportResult | null {

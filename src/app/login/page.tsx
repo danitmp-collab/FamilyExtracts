@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { signIn } from "./actions";
+import { isTestUserSelectorEnabled } from "@/lib/test-users";
+import { signInWithGoogle } from "./actions";
 
 type LoginPageProps = {
   searchParams: Promise<{
@@ -9,8 +10,7 @@ type LoginPageProps = {
 };
 
 const errors: Record<string, string> = {
-  "missing-fields": "Introduce email y contrasena.",
-  "invalid-credentials": "No se ha podido iniciar sesion con esos datos."
+  "google-oauth": "No se ha podido iniciar sesion con Google."
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
@@ -20,6 +20,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   } = await supabase.auth.getUser();
 
   if (user) {
+    if (isTestUserSelectorEnabled()) {
+      redirect("/test-users");
+    }
+
     redirect("/dashboard");
   }
 
@@ -27,36 +31,30 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const errorMessage = error ? errors[error] : null;
 
   return (
-    <main className="page">
-      <section className="panel stack">
-        <div>
-          <h1>Familyextracts</h1>
+    <main className="page login-page finance-auth-page">
+      <section className="panel stack login-panel finance-auth-card">
+        <div className="finance-auth-brand">
+          <div className="finance-auth-kicker-row">
+            <span className="finance-brand-mark" aria-hidden="true">F</span>
+            <p className="eyebrow">Control familiar</p>
+          </div>
+          <h1 className="login-title">Family_extracts</h1>
           <p className="muted">Acceso al control financiero familiar.</p>
         </div>
 
-        <form className="form" action={signIn}>
-          <label className="field">
-            <span>Email</span>
-            <input className="input" type="email" name="email" autoComplete="email" required />
-          </label>
+        {errorMessage ? <p className="error">{errorMessage}</p> : null}
 
-          <label className="field">
-            <span>Contrasena</span>
-            <input
-              className="input"
-              type="password"
-              name="password"
-              autoComplete="current-password"
-              required
-            />
-          </label>
-
-          {errorMessage ? <p className="error">{errorMessage}</p> : null}
-
-          <button className="button" type="submit">
-            Entrar
+        <form className="form" action={signInWithGoogle}>
+          <button className="button finance-primary-action" type="submit">
+            Entrar con Google
           </button>
         </form>
+
+        <div className="finance-auth-preview" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
       </section>
     </main>
   );

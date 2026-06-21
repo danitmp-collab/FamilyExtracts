@@ -81,7 +81,8 @@ begin
     grupo_concepto,
     importe,
     saldo,
-    referencia
+    referencia,
+    deduplication_key
   )
   select
     p_workspace_id,
@@ -95,7 +96,15 @@ begin
     coalesce(row_data.grupo_concepto, 'Sin concepto'),
     row_data.importe,
     row_data.saldo,
-    row_data.referencia
+    row_data.referencia,
+    concat_ws(
+      '|',
+      row_data.fecha_operativa::text,
+      coalesce(row_data.concepto_normalizado, 'SIN CONCEPTO'),
+      to_char(row_data.importe, 'FM999999999999990.00'),
+      coalesce(to_char(row_data.saldo, 'FM999999999999990.00'), ''),
+      coalesce(regexp_replace(trim(row_data.referencia), '\s+', ' ', 'g'), '')
+    )
   from jsonb_to_recordset(p_rows) as row_data(
     status text,
     fecha_operativa date,

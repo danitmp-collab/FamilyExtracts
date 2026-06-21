@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import {
   completeExcelImport,
@@ -28,34 +29,70 @@ export function ImportPreviewForm({ entityId, accountId }: ImportPreviewFormProp
     FormData
   >(completeAction, {
     importId: null,
+    rowsTotal: 0,
     rowsImported: 0,
+    rowsDuplicates: 0,
+    rowsFailed: 0,
     error: null
   });
+  const isCompleted = Boolean(completeState.importId);
 
   return (
     <div className="stack">
-      <form className="form" action={formAction}>
-        <label className="field">
-          <span>Archivo Excel</span>
-          <input className="input" type="file" name="file" accept=".xlsx" required />
-        </label>
+      {!isCompleted ? (
+        <form className="form finance-form" action={formAction}>
+          <label className="field">
+            <span>Archivo Excel</span>
+            <input className="input" type="file" name="file" accept=".xlsx" required />
+          </label>
 
-        <button className="button" type="submit" disabled={isPending}>
-          {isPending ? "Leyendo archivo" : "Ver vista previa"}
-        </button>
-      </form>
+          <button className="button" type="submit" disabled={isPending}>
+            {isPending ? "Leyendo archivo" : "Ver vista previa"}
+          </button>
+        </form>
+      ) : null}
 
       {state.error ? <p className="error">{state.error}</p> : null}
       {completeState.error ? <p className="error">{completeState.error}</p> : null}
-      {completeState.importId ? (
-        <p className="success">
-          Importacion completada. Movimientos importados: {completeState.rowsImported}.
-        </p>
+      {isCompleted ? (
+        <section className="success-panel stack finance-success-panel" aria-live="polite">
+          <div>
+            <h2>Importacion completada</h2>
+            <p className="muted">La vista previa se ha cerrado para evitar dobles confirmaciones.</p>
+          </div>
+
+          <div className="summary-grid compact-summary finance-summary-grid">
+            <div>
+              <span>Importados</span>
+              <strong>{completeState.rowsImported}</strong>
+            </div>
+            <div>
+              <span>Duplicados</span>
+              <strong>{completeState.rowsDuplicates}</strong>
+            </div>
+            <div>
+              <span>Errores</span>
+              <strong>{completeState.rowsFailed}</strong>
+            </div>
+          </div>
+
+          <div className="actions">
+            <Link className="button" href={`/entities/${entityId}/accounts/${accountId}/movements`}>
+              Ver movimientos
+            </Link>
+            <Link className="button secondary finance-ghost-action" href={`/entities/${entityId}/accounts/${accountId}/imports`}>
+              Ver historial de importaciones
+            </Link>
+            <Link className="button secondary finance-ghost-action" href={`/entities/${entityId}/accounts/${accountId}/import`}>
+              Subir otro Excel
+            </Link>
+          </div>
+        </section>
       ) : null}
 
-      {state.preview ? (
+      {state.preview && !isCompleted ? (
         <section className="stack">
-          <div className="summary-grid">
+          <div className="summary-grid finance-summary-grid">
             <div>
               <span>Filas totales</span>
               <strong>{state.preview.summary.rows_total}</strong>
@@ -78,7 +115,7 @@ export function ImportPreviewForm({ entityId, accountId }: ImportPreviewFormProp
             </div>
           </div>
 
-          <div className="panel stack">
+          <div className="panel stack finance-account-panel">
             <h2>Columnas detectadas</h2>
             <div className="definition-grid">
               {Object.entries(state.preview.detectedColumns).map(([key, value]) => (
@@ -90,7 +127,7 @@ export function ImportPreviewForm({ entityId, accountId }: ImportPreviewFormProp
             </div>
           </div>
 
-          <div className="panel stack">
+          <div className="panel stack finance-account-panel">
             <h2>Vista previa</h2>
             <form className="actions" action={completeFormAction}>
               <input type="hidden" name="preview" value={JSON.stringify(state.preview)} />
@@ -118,19 +155,25 @@ export function ImportPreviewForm({ entityId, accountId }: ImportPreviewFormProp
                 <tbody>
                   {state.preview.rows.map((row) => (
                     <tr key={row.rowNumber} className={getRowClassName(row.status)}>
-                      <td>{row.rowNumber}</td>
-                      <td>
+                      <td data-label="Fila">{row.rowNumber}</td>
+                      <td data-label="Estado">
                         <span className={`status ${row.status}`}>{getStatusLabel(row.status)}</span>
                       </td>
-                      <td>{row.fecha_operativa ?? "-"}</td>
-                      <td>{row.fecha_valor ?? "-"}</td>
-                      <td>{row.concepto_original || "-"}</td>
-                      <td>{row.concepto_normalizado}</td>
-                      <td>{row.grupo_concepto}</td>
-                      <td>{formatAmount(row.importe)}</td>
-                      <td>{formatAmount(row.saldo)}</td>
-                      <td>{row.referencia ?? "-"}</td>
-                      <td>{row.errors.length > 0 ? row.errors.join(" ") : "-"}</td>
+                      <td data-label="F. operativa">{row.fecha_operativa ?? "-"}</td>
+                      <td data-label="F. valor">{row.fecha_valor ?? "-"}</td>
+                      <td data-label="Concepto">
+                        <strong className="table-card-title">{row.concepto_original || "-"}</strong>
+                      </td>
+                      <td data-label="Normalizado">{row.concepto_normalizado}</td>
+                      <td data-label="Grupo">{row.grupo_concepto}</td>
+                      <td className={row.importe !== null && row.importe < 0 ? "money-negative" : undefined} data-label="Importe">
+                        {formatAmount(row.importe)}
+                      </td>
+                      <td className={row.saldo !== null && row.saldo < 0 ? "money-negative" : undefined} data-label="Saldo">
+                        {formatAmount(row.saldo)}
+                      </td>
+                      <td data-label="Referencia">{row.referencia ?? "-"}</td>
+                      <td data-label="Errores">{row.errors.length > 0 ? row.errors.join(" ") : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -149,6 +192,9 @@ function formatAmount(value: number | null) {
   }
 
   return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+    currencyDisplay: "symbol",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(value);
