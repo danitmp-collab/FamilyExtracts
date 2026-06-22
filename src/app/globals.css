@@ -311,6 +311,13 @@ select {
   line-height: 1.02;
 }
 
+.finance-last-update {
+  margin: 7px 0 0;
+  color: var(--finance-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .finance-hero-panel,
 .finance-account-panel {
   border-color: var(--finance-border);

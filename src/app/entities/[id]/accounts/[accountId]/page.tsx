@@ -3,13 +3,18 @@ import { notFound } from "next/navigation";
 import { MobileBackNavButton } from "@/app/back-button";
 import { signOut } from "@/app/dashboard/actions";
 import { AccountFilterForm } from "./account-filter-form";
-import { getBankAccountForEntity, getLatestAccountBalance } from "@/lib/bank-accounts";
+import {
+  getBankAccountForEntity,
+  getLatestAccountBalance,
+  getLatestAccountMovementDate,
+  isMovementDateStale
+} from "@/lib/bank-accounts";
 import {
   buildConceptGroupFilterQuery,
   listConceptGroupsForAccount,
   parseConceptGroupFilters
 } from "@/lib/concept-groups";
-import { formatMoney } from "@/lib/import-history";
+import { formatMoney, formatTransactionDate } from "@/lib/import-history";
 import { getViewMode, withViewMode, type ViewModeSearchParams } from "@/lib/view-mode";
 
 type AccountPageProps = {
@@ -28,6 +33,7 @@ export default async function AccountPage({ params, searchParams }: AccountPageP
   const { workspace, entity, account } = await getBankAccountForEntity(id, accountId);
   const viewMode = workspace.role === "admin" ? requestedViewMode : "personal";
   const balance = await getLatestAccountBalance(id, accountId);
+  const latestMovementDate = await getLatestAccountMovementDate(id, accountId);
   const { groups, filterOptions } = await listConceptGroupsForAccount(id, accountId, filters);
   const incomeTotal = groups.reduce((total, group) => total + group.income, 0);
   const expenseTotal = groups.reduce((total, group) => total + group.expenses, 0);
@@ -46,6 +52,10 @@ export default async function AccountPage({ params, searchParams }: AccountPageP
           <div>
             <p className="eyebrow">{workspace.name} / {entity.name}</p>
             <h1>{account.name}</h1>
+            <p className="finance-last-update">
+              Última actualización: {latestMovementDate ? formatTransactionDate(latestMovementDate) : "Sin datos"}
+              {isMovementDateStale(latestMovementDate) ? <span aria-label="Datos desactualizados"> ⚠️</span> : null}
+            </p>
           </div>
         </div>
 

@@ -110,6 +110,35 @@ export async function getLatestAccountBalance(entityId: string, accountId: strin
   return data?.saldo ?? null;
 }
 
+export async function getLatestAccountMovementDate(entityId: string, accountId: string) {
+  const { workspace, entity, account } = await getBankAccountForEntity(entityId, accountId);
+
+  if (!entity || !account) {
+    return null;
+  }
+
+  return getLatestMovementDate(workspace.id, entity.id, account.id);
+}
+
+export async function getLatestEntityMovementDate(entityId: string) {
+  const { workspace, entity } = await getEconomicEntity(entityId);
+
+  if (!entity) {
+    return null;
+  }
+
+  return getLatestMovementDate(workspace.id, entity.id);
+}
+
+export function isMovementDateStale(value: string | null) {
+  if (!value) {
+    return false;
+  }
+
+  const movementDate = new Date(`${value}T00:00:00Z`).getTime();
+  return Date.now() - movementDate > 30 * 24 * 60 * 60 * 1000;
+}
+
 export async function listLatestAccountBalancesForEntity(entityId: string) {
   const { workspace, entity } = await getEconomicEntity(entityId);
 
@@ -156,4 +185,27 @@ export async function listLatestAccountBalancesForEntity(entityId: string) {
     entity,
     balances
   };
+}
+
+async function getLatestMovementDate(workspaceId: string, entityId: string, accountId?: string) {
+  const supabase = await createClient();
+  let query = supabase
+    .from("transactions")
+    .select("fecha_operativa")
+    .eq("workspace_id", workspaceId)
+    .eq("economic_entity_id", entityId)
+    .order("fecha_operativa", { ascending: false })
+    .limit(1);
+
+  if (accountId) {
+    query = query.eq("bank_account_id", accountId);
+  }
+
+  const { data, error } = await query.maybeSingle<{ fecha_operativa: string }>();
+
+  if (error) {
+    throw new Error(`No se pudo cargar la fecha del ultimo movimiento: ${error.message}`);
+  }
+
+  return data?.fecha_operativa ?? null;
 }

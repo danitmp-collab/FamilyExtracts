@@ -3,9 +3,14 @@ import { notFound } from "next/navigation";
 import { MobileBackNavButton } from "@/app/back-button";
 import { signOut } from "@/app/dashboard/actions";
 import { deactivateBankAccount } from "@/app/entities/[id]/accounts/actions";
-import { listBankAccountsForEntity, listLatestAccountBalancesForEntity } from "@/lib/bank-accounts";
+import {
+  getLatestEntityMovementDate,
+  isMovementDateStale,
+  listBankAccountsForEntity,
+  listLatestAccountBalancesForEntity
+} from "@/lib/bank-accounts";
 import { canManageEconomicEntity, getEconomicEntity, listEconomicEntities } from "@/lib/economic-entities";
-import { formatMoney } from "@/lib/import-history";
+import { formatMoney, formatTransactionDate } from "@/lib/import-history";
 import { getViewMode, withViewMode, type ViewModeSearchParams } from "@/lib/view-mode";
 
 type EntityPageProps = {
@@ -28,6 +33,7 @@ export default async function EntityPage({ params, searchParams }: EntityPagePro
 
   const { accounts } = await listBankAccountsForEntity(entity.id);
   const { balances } = await listLatestAccountBalancesForEntity(entity.id);
+  const latestMovementDate = await getLatestEntityMovementDate(entity.id);
   const knownBalances = accounts
     .map((account) => balances.get(account.id))
     .filter((balance): balance is number | string => balance !== undefined);
@@ -43,6 +49,10 @@ export default async function EntityPage({ params, searchParams }: EntityPagePro
           <div>
             <p className="eyebrow">{workspace.name}</p>
             <h1>{entity.name}</h1>
+            <p className="finance-last-update">
+              Última actualización: {latestMovementDate ? formatTransactionDate(latestMovementDate) : "Sin datos"}
+              {isMovementDateStale(latestMovementDate) ? <span aria-label="Datos desactualizados"> ⚠️</span> : null}
+            </p>
           </div>
 
         </div>
