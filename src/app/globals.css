@@ -218,6 +218,15 @@ select {
   width: 70%;
 }
 
+.finance-app-signature {
+  margin: 2px 0 0;
+  color: rgba(159, 182, 174, 0.78);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+
 .finance-primary-action {
   border: 1px solid rgba(50, 211, 153, 0.55);
   background: linear-gradient(135deg, #10b981, #0f766e);

@@ -55,6 +55,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <span />
           <span />
         </div>
+
+        <p className="finance-app-signature">Creado por Dani · danitmp@gmail.com</p>
       </section>
     </main>
   );
