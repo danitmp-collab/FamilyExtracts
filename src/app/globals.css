@@ -227,6 +227,11 @@ select {
   text-align: center;
 }
 
+.finance-app-signature-logged {
+  margin-top: 4px;
+  padding-bottom: 2px;
+}
+
 .finance-primary-action {
   border: 1px solid rgba(50, 211, 153, 0.55);
   background: linear-gradient(135deg, #10b981, #0f766e);

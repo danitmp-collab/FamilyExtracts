@@ -55,6 +55,8 @@ export default async function DashboardPage() {
           </div>
         </div>
 
+        <p className="finance-app-signature finance-app-signature-logged">Creado por Dani · danitmp@gmail.com</p>
+
         <nav className="mobile-bottom-nav" aria-label="Navegacion principal">
           <form className="mobile-bottom-nav-form" action={signOut}>
             <button className="mobile-bottom-nav-item mobile-bottom-nav-button" type="submit">

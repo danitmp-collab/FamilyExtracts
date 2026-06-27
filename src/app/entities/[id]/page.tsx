@@ -167,6 +167,8 @@ export default async function EntityPage({ params, searchParams }: EntityPagePro
           </div>
         ) : null}
 
+        <p className="finance-app-signature finance-app-signature-logged">Creado por Dani · danitmp@gmail.com</p>
+
         {isPersonalView ? (
           <nav className="mobile-bottom-nav compact-personal-nav" aria-label="Navegacion personal">
             <Link className="mobile-bottom-nav-item active" href={withViewMode(`/entities/${entity.id}`, viewMode)}>
