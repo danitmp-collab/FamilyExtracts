@@ -43,7 +43,7 @@ export function ImportPreviewForm({ entityId, accountId }: ImportPreviewFormProp
         <form className="form finance-form" action={formAction}>
           <label className="field">
             <span>Archivo Excel</span>
-            <input className="input" type="file" name="file" accept=".xlsx" required />
+            <input className="input" type="file" name="file" accept=".xls,.xlsx" required />
           </label>
 
           <button className="button" type="submit" disabled={isPending}>

@@ -1,4 +1,4 @@
-import ExcelJS from "exceljs";
+import * as XLSX from "xlsx";
 
 export type PreviewTransaction = {
   rowNumber: number;
@@ -28,7 +28,7 @@ export type ExcelPreviewResult = {
   rows: PreviewTransaction[];
 };
 
-type ExcelJsWorkbookBuffer = Parameters<ExcelJS.Workbook["xlsx"]["load"]>[0];
+type SpreadsheetCellValue = string | number | boolean | Date | null | undefined;
 
 const columnAliases = {
   fecha_operativa: ["f operativa", "fecha operativa", "fecha operacion", "f operacion"],
@@ -52,10 +52,13 @@ type HeaderDetection = {
 
 export async function parseExcelPreview(file: File): Promise<ExcelPreviewResult> {
   const buffer = Buffer.from(await file.arrayBuffer());
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as ExcelJsWorkbookBuffer);
+  const workbook = XLSX.read(buffer, {
+    type: "buffer",
+    cellDates: true
+  });
 
-  const worksheet = workbook.worksheets[0];
+  const firstSheetName = workbook.SheetNames[0];
+  const worksheet = firstSheetName ? workbook.Sheets[firstSheetName] : undefined;
 
   if (!worksheet) {
     throw new Error("El archivo no contiene hojas.");
@@ -69,18 +72,24 @@ export async function parseExcelPreview(file: File): Promise<ExcelPreviewResult>
 
   const rows: PreviewTransaction[] = [];
 
-  worksheet.eachRow((row, rowNumber) => {
+  const range = getWorksheetRange(worksheet);
+
+  if (!range) {
+    throw new Error("El archivo no contiene hojas.");
+  }
+
+  for (let rowNumber = range.s.r + 1; rowNumber <= range.e.r + 1; rowNumber += 1) {
     if (rowNumber <= header.headerRowNumber) {
-      return;
+      continue;
     }
 
-    if (isEmptyDataRow(row, header.columns)) {
-      return;
+    if (isEmptyDataRow(worksheet, rowNumber, header.columns)) {
+      continue;
     }
 
-    const parsed = parsePreviewRow(row, rowNumber, header.columns);
+    const parsed = parsePreviewRow(worksheet, rowNumber, header.columns);
     rows.push(parsed);
-  });
+  }
 
   const rowsValid = rows.filter((row) => row.errors.length === 0).length;
 
@@ -107,8 +116,9 @@ export async function parseExcelPreview(file: File): Promise<ExcelPreviewResult>
   };
 }
 
-function detectHeader(worksheet: ExcelJS.Worksheet): HeaderDetection {
-  const maxHeaderScanRows = Math.min(worksheet.rowCount, 20);
+function detectHeader(worksheet: XLSX.WorkSheet): HeaderDetection {
+  const range = getWorksheetRange(worksheet);
+  const maxHeaderScanRows = range ? Math.min(range.e.r + 1, 20) : 0;
   let best: HeaderDetection = {
     headerRowNumber: 1,
     columns: {},
@@ -116,16 +126,19 @@ function detectHeader(worksheet: ExcelJS.Worksheet): HeaderDetection {
   };
   let bestScore = 0;
 
-  for (let rowNumber = 1; rowNumber <= maxHeaderScanRows; rowNumber += 1) {
-    const row = worksheet.getRow(rowNumber);
+  if (!range) {
+    return best;
+  }
+
+  for (let rowNumber = range.s.r + 1; rowNumber <= maxHeaderScanRows; rowNumber += 1) {
     const candidate: HeaderDetection = {
       headerRowNumber: rowNumber,
       columns: {},
       labels: {}
     };
 
-    row.eachCell((cell, colNumber) => {
-      const label = getCellText(cell.value);
+    for (let colNumber = range.s.c + 1; colNumber <= range.e.c + 1; colNumber += 1) {
+      const label = getCellText(getCellValue(worksheet, rowNumber, colNumber));
       const normalized = normalizeHeader(label);
       const match = matchHeader(normalized);
 
@@ -133,7 +146,7 @@ function detectHeader(worksheet: ExcelJS.Worksheet): HeaderDetection {
         candidate.columns[match] = colNumber;
         candidate.labels[match] = label;
       }
-    });
+    }
 
     const score = scoreHeader(candidate.columns);
 
@@ -169,14 +182,14 @@ function matchHeader(normalized: string): ColumnKey | null {
   return null;
 }
 
-function parsePreviewRow(row: ExcelJS.Row, rowNumber: number, columns: ColumnMap): PreviewTransaction {
-  const fechaOperativa = parseDateCell(getCellValue(row, columns.fecha_operativa));
-  const fechaValor = parseDateCell(getCellValue(row, columns.fecha_valor));
-  const conceptoOriginal = normalizeWhitespace(getCellText(getCellValue(row, columns.concepto)));
+function parsePreviewRow(worksheet: XLSX.WorkSheet, rowNumber: number, columns: ColumnMap): PreviewTransaction {
+  const fechaOperativa = parseDateCell(getCellValue(worksheet, rowNumber, columns.fecha_operativa));
+  const fechaValor = parseDateCell(getCellValue(worksheet, rowNumber, columns.fecha_valor));
+  const conceptoOriginal = normalizeWhitespace(getCellText(getCellValue(worksheet, rowNumber, columns.concepto)));
   const concept = normalizeConcept(conceptoOriginal);
-  const importe = parseAmountCell(getCellValue(row, columns.importe));
-  const saldo = parseAmountCell(getCellValue(row, columns.saldo));
-  const referencia = buildReference(row, columns);
+  const importe = parseAmountCell(getCellValue(worksheet, rowNumber, columns.importe));
+  const saldo = parseAmountCell(getCellValue(worksheet, rowNumber, columns.saldo));
+  const referencia = buildReference(worksheet, rowNumber, columns);
   const errors: string[] = [];
 
   if (!fechaOperativa) {
@@ -207,15 +220,15 @@ function parsePreviewRow(row: ExcelJS.Row, rowNumber: number, columns: ColumnMap
   };
 }
 
-function buildReference(row: ExcelJS.Row, columns: ColumnMap) {
+function buildReference(worksheet: XLSX.WorkSheet, rowNumber: number, columns: ColumnMap) {
   const parts = [columns.referencia, columns.referencia_1, columns.referencia_2]
-    .map((column) => normalizeWhitespace(getCellText(getCellValue(row, column))))
+    .map((column) => normalizeWhitespace(getCellText(getCellValue(worksheet, rowNumber, column))))
     .filter(Boolean);
 
   return parts.length > 0 ? parts.join(" / ") : null;
 }
 
-function isEmptyDataRow(row: ExcelJS.Row, columns: ColumnMap) {
+function isEmptyDataRow(worksheet: XLSX.WorkSheet, rowNumber: number, columns: ColumnMap) {
   const relevantColumns = [
     columns.fecha_operativa,
     columns.fecha_valor,
@@ -227,38 +240,29 @@ function isEmptyDataRow(row: ExcelJS.Row, columns: ColumnMap) {
     columns.referencia_2
   ];
 
-  return relevantColumns.every((column) => !normalizeWhitespace(getCellText(getCellValue(row, column))));
+  return relevantColumns.every((column) => !normalizeWhitespace(getCellText(getCellValue(worksheet, rowNumber, column))));
 }
 
-function getCellValue(row: ExcelJS.Row, column?: number) {
+function getWorksheetRange(worksheet: XLSX.WorkSheet) {
+  return worksheet["!ref"] ? XLSX.utils.decode_range(worksheet["!ref"]) : null;
+}
+
+function getCellValue(worksheet: XLSX.WorkSheet, rowNumber: number, column?: number): SpreadsheetCellValue {
   if (!column) {
     return null;
   }
 
-  return row.getCell(column).value;
+  const cell = worksheet[XLSX.utils.encode_cell({ r: rowNumber - 1, c: column - 1 })];
+  return cell?.v as SpreadsheetCellValue;
 }
 
-function getCellText(value: ExcelJS.CellValue | null | undefined): string {
+function getCellText(value: SpreadsheetCellValue): string {
   if (value === null || value === undefined) {
     return "";
   }
 
   if (value instanceof Date) {
     return value.toISOString();
-  }
-
-  if (typeof value === "object") {
-    if ("text" in value && value.text) {
-      return String(value.text);
-    }
-
-    if ("result" in value) {
-      return getCellText(value.result);
-    }
-
-    if ("richText" in value) {
-      return value.richText.map((part) => part.text).join("");
-    }
   }
 
   return String(value);
@@ -272,7 +276,7 @@ function normalizeHeader(value: string) {
     .replace(/\s+/g, " ");
 }
 
-function parseDateCell(value: ExcelJS.CellValue | null | undefined) {
+function parseDateCell(value: SpreadsheetCellValue) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return toIsoDate(value);
   }
@@ -331,7 +335,7 @@ function toIsoDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
-function parseAmountCell(value: ExcelJS.CellValue | null | undefined) {
+function parseAmountCell(value: SpreadsheetCellValue) {
   if (value === null || value === undefined || value === "") {
     return null;
   }
